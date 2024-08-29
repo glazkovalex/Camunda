@@ -12,19 +12,19 @@
 
     [Parameter]
     public FormSchema FormSchema { get; set; } = null;
-    
+
     [Parameter]
     public RenderFragment NoSchemaDisplay { get; set; }
 
     [Parameter]
     public object BuilderConfig { get; set; } = null;
-    
+
     [Parameter]
     public EventCallback OnBuilderSaveComponent { get; set; }
-    
+
     [Parameter]
     public EventCallback<FormSchema> OnBuilderChange { get; set; }
-    
+
     // [Parameter]
     // public string GeneratedSchema { get; set; }
 
@@ -37,7 +37,7 @@
         }
     }
 
-    
+
     private async Task BuildForm()
     {
         var dotNetReference = DotNetObjectReference.Create(this);

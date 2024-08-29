@@ -1,0 +1,158 @@
+﻿@page "/forms/blazor-formio-test"
+@implements IAsyncDisposable
+@using Formio.Components;
+@using System.Text.Json
+
+<HeadContent>
+
+</HeadContent>
+
+<h3>BlazorFormioTest</h3>
+<div @ref="@FormioElement"></div>
+<div>
+    <FormioBuilder @ref="@_builder"
+                   OnBuilderChange="@HandleBuilderChangeEvent"
+                   FormSchema="@_builderSchema">
+    </FormioBuilder>
+</div>
+<div>
+    <button @onclick="UpdateViewerSchema" class="btn btn-secondary btn-md" Disabled="@(_builderSchemaText == null)">Load Form from Builder</button>
+</div>
+@if (_viewerSchema != null)
+{
+    <div>
+        <div>Form viewer</div>
+        <FormioViewer @ref="@_viewer"
+                      @bind-FormSchema="@_viewerSchema"
+                      OnFormSubmit="@HandleFormSubmission">
+        </FormioViewer>
+    </div>
+}
+<div>
+    <button @onclick="LoadFormFromJson" class="btn btn-secondary btn-md">Load Form from json</button>
+</div>
+@* <div>
+    <button type="button" @onclick=BuildForm>Build form</button>
+</div> *@
+
+@code {
+
+    async Task UpdateViewerSchema()
+    {
+        _viewerSchema = JsonSerializer.Deserialize<FormSchema>(_builderSchemaText);
+        if (_viewer != null)
+        {
+            await _viewer.RebuildForm();
+        }
+    }
+
+    [Inject] IJSRuntime JS { get; set; }
+    private FormioBuilder _builder;
+    private FormioViewer _viewer;
+    FormSchema _builderSchema;
+    string _builderSchemaText;
+    FormSchema _viewerSchema;
+    object _formSubmission;
+    string _formSubmissionText;
+
+    ElementReference FormioElement;
+    Lazy<Task<IJSObjectReference>> FormioModule;
+    IJSObjectReference FormInstance;
+    [Parameter]
+    public FormSchema FormSchema { get; set; } = null;
+    [Parameter]
+    public object FormDefaultData { get; set; } = null;
+    [Parameter]
+    public object FormOptions { get; set; } = null;
+    IJSObjectReference _interopHelpers;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _builderSchema = new FormSchema
+            {
+                Display = "form"
+            };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            FormioModule = new(() => JS.InvokeAsync<IJSObjectReference>("import", "./_content/Formio/js/formio-interop.js").AsTask());
+            await BuildForm();
+            StateHasChanged();
+        }
+    }
+
+    private async Task BuildForm()
+    {
+        var dotNetReference = DotNetObjectReference.Create(this);
+        var module = await FormioModule.Value;
+        FormInstance = await module.InvokeAsync<IJSObjectReference>("createForm", FormioElement, FormSchema, FormOptions, dotNetReference);
+
+        await module.InvokeVoidAsync("setNoSubmit", FormInstance, "true");
+
+        if (FormDefaultData != null)
+        {
+            await module.InvokeVoidAsync("setDefaultData", FormInstance, FormDefaultData);
+        }
+    }
+
+    void HandleBuilderChangeEvent(FormSchema schema)
+    {
+        _builderSchema = schema;
+        _builderSchemaText = JsonSerializer.Serialize(schema, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    void HandleFormSubmission(object submission)
+    {
+        _formSubmission = submission;
+        _formSubmissionText = JsonSerializer.Serialize(submission, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        await FormInstance.DisposeAsync();
+        if (FormioModule.IsValueCreated)
+        {
+            var module = await FormioModule.Value;
+            await module.DisposeAsync();
+        }
+    }
+
+    async Task LoadFormFromJson()
+    {
+        _builderSchemaText = @"{
+  ""display"": ""form"",
+  ""components"": [
+    {
+      ""label"": ""Text Area"",
+      ""widget"": """",
+      ""applyMaskOn"": ""change"",
+      ""autoExpand"": false,
+      ""tableView"": true,
+      ""key"": ""textArea"",
+      ""type"": ""textarea"",
+      ""input"": true
+    },
+    {
+      ""label"": ""Text Field"",
+      ""applyMaskOn"": ""change"",
+      ""tableView"": true,
+      ""key"": ""textField"",
+      ""type"": ""textfield"",
+      ""input"": true
+    },
+    {
+      ""type"": ""button"",
+      ""label"": ""Submit"",
+      ""key"": ""submit"",
+      ""disableOnInvalid"": true,
+      ""input"": true,
+      ""tableView"": false
+    }
+  ]
+}";
+        await UpdateViewerSchema();
+    }
+}
